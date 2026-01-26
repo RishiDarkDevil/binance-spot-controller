@@ -19,4 +19,4 @@ atx-feed = { workspace = true }
 atx-websocket = { workspace = true }
 
 # internal
-ctl-feed = { workspace = true }
+ctl-core = { workspace = true }

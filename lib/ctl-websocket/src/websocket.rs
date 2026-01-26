@@ -2,7 +2,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use atx_feed::{FeedData, FeedPoll, FeedProtocol, FeedProtocolOps, Streams};
 use atx_websocket::{WebsocketConfig, WebsocketConn};
-use ctl_feed::{Top, Trade};
+use ctl_core::{Top, Trade};
 
 use crate::BinanceWebsocketConnError;
 
@@ -11,15 +11,15 @@ static REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 
 /// The exchange websocket connector.
 /// This provides all the necessary methods to connect to the exchange websocket.
-pub struct BinanceWebsocketConn {
+pub struct BSWebsocketConn {
     /// The underlying websocket connection.
     websocket: WebsocketConn,
     /// Buffer for storing received message data.
     recv_buffer: Vec<u8>,
 }
 
-impl BinanceWebsocketConn {
-    /// Creates a new BinanceWebsocketConn instance.
+impl BSWebsocketConn {
+    /// Creates a new BSWebsocketConn instance.
     pub fn new(url: &str) -> Result<Self, BinanceWebsocketConnError> {
         let mut websocket = WebsocketConn::new(url, WebsocketConfig::default())?;
         websocket.connect()?;
@@ -68,7 +68,7 @@ impl BinanceWebsocketConn {
     }
 }
 
-impl FeedProtocolOps for BinanceWebsocketConn {
+impl FeedProtocolOps for BSWebsocketConn {
     type FeedProtocolError = BinanceWebsocketConnError;
 
     fn poll(&mut self) -> Result<FeedPoll<'_>, Self::FeedProtocolError> {
@@ -88,7 +88,7 @@ impl FeedProtocolOps for BinanceWebsocketConn {
     }
 }
 
-impl FeedProtocol<Top> for BinanceWebsocketConn {
+impl FeedProtocol<Top> for BSWebsocketConn {
     fn update(&mut self, streams: &Streams<Top>) -> Result<(), Self::FeedProtocolError> {
         // For BookTicker (Top), the stream name format is: <symbol>@bookTicker
         // The stream name in Streams<Top> is expected to be the symbol (lowercase)
@@ -107,7 +107,7 @@ impl FeedProtocol<Top> for BinanceWebsocketConn {
     }
 }
 
-impl FeedProtocol<Trade> for BinanceWebsocketConn {
+impl FeedProtocol<Trade> for BSWebsocketConn {
     fn update(&mut self, streams: &Streams<Trade>) -> Result<(), Self::FeedProtocolError> {
         // For Trade, the stream name format is: <symbol>@trade
         // The stream name in Streams<Trade> is expected to be the symbol (lowercase)
