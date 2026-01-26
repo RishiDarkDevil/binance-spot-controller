@@ -11,3 +11,7 @@ authors.workspace = true
 # internal (atomix-core/)
 # exchange
 atx-feed = { workspace = true }
+
+# internal
+ctl-core = { workspace = true }
+ctl-websocket = { workspace = true }
