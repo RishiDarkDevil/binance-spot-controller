@@ -7,6 +7,16 @@ authors.workspace = true
 
 [dependencies]
 # external
+thiserror = { workspace = true }
+derive_more = { workspace = true }
+serde_json = { workspace = true }
 
 # internal (atomix-core/)
+# exchange
+atx-feed = { workspace = true }
+
+# network
 atx-websocket = { workspace = true }
+
+# internal
+ctl-feed = { workspace = true }
