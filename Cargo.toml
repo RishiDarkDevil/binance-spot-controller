@@ -58,5 +58,6 @@ atx-rest = { version = "0.1.0", path = "../atomix-core/lib/network/atx-rest"}
 atx-websocket = { version = "0.1.0", path = "../atomix-core/lib/network/atx-websocket"}
 
 # internal
+ctl-core = { version = "0.1.0", path = "lib/ctl-core" }
 ctl-feed = { version = "0.1.0", path = "lib/ctl-feed" }
 ctl-websocket = { version = "0.1.0", path = "lib/ctl-websocket" }

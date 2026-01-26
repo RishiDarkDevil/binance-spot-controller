@@ -171,10 +171,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "ctl-core"
+version = "0.1.0"
+dependencies = [
+ "atx-feed",
+]
+
+[[package]]
 name = "ctl-feed"
 version = "0.1.0"
 dependencies = [
  "atx-feed",
+ "ctl-core",
+ "ctl-websocket",
 ]
 
 [[package]]
@@ -190,7 +199,7 @@ version = "0.1.0"
 dependencies = [
  "atx-feed",
  "atx-websocket",
- "ctl-feed",
+ "ctl-core",
  "derive_more",
  "serde_json",
  "thiserror",
