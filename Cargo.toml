@@ -1,7 +1,7 @@
 [workspace]
 members = [
     "bins/ctl-*", 
-    "lib/network/ctl-*"]
+    "lib/ctl-*"]
 resolver = "3"
 
 [workspace.package]
@@ -48,7 +48,7 @@ tungstenite = { version = "0.28.0", features = ["native-tls"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = { version = "1.0.149" }
 
-# internal (atomix-core)
+# internal (atomix-core/)
 
 # exchange
 atx-feed = { version = "0.1.0", path = "../atomix-core/lib/exchange/atx-feed" }
@@ -56,3 +56,7 @@ atx-feed = { version = "0.1.0", path = "../atomix-core/lib/exchange/atx-feed" }
 # network
 atx-rest = { version = "0.1.0", path = "../atomix-core/lib/network/atx-rest"}
 atx-websocket = { version = "0.1.0", path = "../atomix-core/lib/network/atx-websocket"}
+
+# internal
+ctl-feed = { version = "0.1.0", path = "lib/ctl-feed" }
+ctl-websocket = { version = "0.1.0", path = "lib/ctl-websocket" }
