@@ -184,6 +184,7 @@ dependencies = [
  "atx-feed",
  "ctl-core",
  "ctl-websocket",
+ "dpdk",
 ]
 
 [[package]]
@@ -192,6 +193,14 @@ version = "0.1.0"
 dependencies = [
  "atx-feed",
 ]
+
+[[package]]
+name = "ctl-norm"
+version = "0.1.0"
+
+[[package]]
+name = "ctl-parser"
+version = "0.1.0"
 
 [[package]]
 name = "ctl-websocket"
