@@ -1,5 +1,9 @@
 mod websocket;
+mod requests;
 mod error;
 
-pub use websocket::BSWebsocketConn;
-pub use error::BinanceWebsocketConnError;
+pub use websocket::WSConn;
+pub use requests::{
+    WSRequest, WSRequestKind, WSRequestId, WSRequestError, RequestIdString
+};
+pub use error::WebsocketConnectorError;

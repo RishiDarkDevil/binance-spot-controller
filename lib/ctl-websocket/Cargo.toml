@@ -9,7 +9,9 @@ authors.workspace = true
 # external
 thiserror = { workspace = true }
 derive_more = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
+arraystring = { workspace = true }
 
 # internal (atomix-core/)
 # exchange
@@ -19,4 +21,6 @@ atx-feed = { workspace = true }
 atx-websocket = { workspace = true }
 
 # internal
-ctl-core = { workspace = true }
+
+[dev-dependencies]
+base64 = { workspace = true }

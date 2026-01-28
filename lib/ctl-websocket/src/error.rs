@@ -1,8 +1,8 @@
-use atx_websocket::WebsocketError;
+use atx_websocket::WebsocketConnError;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum BinanceWebsocketConnError {
+pub enum WebsocketConnectorError {
     #[error("Websocket error: {0}")]
-    WebsocketError(#[from] WebsocketError)
+    WebsocketConnError(#[from] WebsocketConnError)
 }
