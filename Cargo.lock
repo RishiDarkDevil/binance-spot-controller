@@ -193,6 +193,7 @@ dependencies = [
  "atx-feed",
  "ctl-websocket",
  "dpdk",
+ "serde_json",
 ]
 
 [[package]]

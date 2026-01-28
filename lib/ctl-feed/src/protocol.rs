@@ -1,38 +1,49 @@
+use atx_feed::{FeedProtocol, FeedProtocolOps, Streams};
+use ctl_websocket::{WSConn, WSRequest, WSRequestKind};
 
-impl FeedProtocol<Top> for BSWebsocketConn {
+use crate::{AggTrade, Top, Trade};
+
+impl FeedProtocol<Top> for WSConn {
     fn update(&mut self, streams: &Streams<Top>) -> Result<(), Self::FeedProtocolError> {
-        // For BookTicker (Top), the stream name format is: <symbol>@bookTicker
-        // The stream name in Streams<Top> is expected to be the symbol (lowercase)
-        // e.g., "btcusdt" -> "btcusdt@bookTicker"
         let stream_names: Vec<String> = streams
             .iter()
             .map(|s| format!("{}@bookTicker", s.name))
             .collect();
-
-        let stream_refs: Vec<&str> = stream_names.iter().map(|s| s.as_str()).collect();
-
-        // For simplicity, we subscribe to all streams.
-        // A more sophisticated implementation would track current subscriptions
-        // and only subscribe/unsubscribe the diff.
-        self.subscribe(&stream_refs)
+        let req: WSRequest = (
+            WSRequestKind::Subscribe(stream_names), 
+            None
+        ).into();
+        let request_json = serde_json::to_vec(&req)?;
+        self.send(&request_json)
     }
 }
 
-impl FeedProtocol<Trade> for BSWebsocketConn {
+impl FeedProtocol<Trade> for WSConn {
     fn update(&mut self, streams: &Streams<Trade>) -> Result<(), Self::FeedProtocolError> {
-        // For Trade, the stream name format is: <symbol>@trade
-        // The stream name in Streams<Trade> is expected to be the symbol (lowercase)
-        // e.g., "btcusdt" -> "btcusdt@trade"
         let stream_names: Vec<String> = streams
             .iter()
             .map(|s| format!("{}@trade", s.name))
             .collect();
+        let req: WSRequest = (
+            WSRequestKind::Subscribe(stream_names), 
+            None
+        ).into();
+        let request_json = serde_json::to_vec(&req)?;
+        self.send(&request_json)
+    }
+}
 
-        let stream_refs: Vec<&str> = stream_names.iter().map(|s| s.as_str()).collect();
-
-        // For simplicity, we subscribe to all streams.
-        // A more sophisticated implementation would track current subscriptions
-        // and only subscribe/unsubscribe the diff.
-        self.subscribe(&stream_refs)
+impl FeedProtocol<AggTrade> for WSConn {
+    fn update(&mut self, streams: &Streams<AggTrade>) -> Result<(), Self::FeedProtocolError> {
+        let stream_names: Vec<String> = streams
+            .iter()
+            .map(|s| format!("{}@aggTrade", s.name))
+            .collect();
+        let req: WSRequest = (
+            WSRequestKind::Subscribe(stream_names), 
+            None
+        ).into();
+        let request_json = serde_json::to_vec(&req)?;
+        self.send(&request_json)
     }
 }
