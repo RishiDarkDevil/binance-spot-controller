@@ -15,5 +15,4 @@ atx-feed = { workspace = true }
 dpdk = { version = "0.1.0", path = "../../../atomix-core/lib/utils/rust-dpdk/dpdk" }
 
 # internal
-ctl-core = { workspace = true }
 ctl-websocket = { workspace = true }
