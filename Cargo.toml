@@ -33,6 +33,7 @@ rpath = false            # Disable runtime search path.
 
 [workspace.dependencies]
 # external
+base64 = "0.22"
 libc = { version = "0.2" }
 walkdir = { version = "2.5.0" }
 cfg-if = { version = "1.0.0" }
@@ -47,6 +48,7 @@ derive_more = { version = "2.1.1", features = ["full"] }
 tungstenite = { version = "0.28.0", features = ["native-tls"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = { version = "1.0.149" }
+arraystring = { version = "0.3.0", features = ["serde-traits"] }
 
 # internal (atomix-core/)
 
@@ -58,6 +60,5 @@ atx-rest = { version = "0.1.0", path = "../atomix-core/lib/network/atx-rest"}
 atx-websocket = { version = "0.1.0", path = "../atomix-core/lib/network/atx-websocket"}
 
 # internal
-ctl-core = { version = "0.1.0", path = "lib/ctl-core" }
 ctl-feed = { version = "0.1.0", path = "lib/ctl-feed" }
 ctl-websocket = { version = "0.1.0", path = "lib/ctl-websocket" }
