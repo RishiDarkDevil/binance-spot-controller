@@ -7,13 +7,14 @@ authors.workspace = true
 
 [dependencies]
 # external
+dpdk = { workspace = true }
+thiserror = { workspace = true }
+derive_more = { workspace = true }
 serde_json = { workspace = true }
 
 # internal (atomix-core/)
 # exchange
 atx-feed = { workspace = true }
-
-dpdk = { version = "0.1.0", path = "../../../atomix-core/lib/utils/rust-dpdk/dpdk" }
 
 # internal
 ctl-websocket = { workspace = true }
