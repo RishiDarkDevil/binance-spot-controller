@@ -192,8 +192,10 @@ version = "0.1.0"
 dependencies = [
  "atx-feed",
  "ctl-websocket",
+ "derive_more",
  "dpdk",
  "serde_json",
+ "thiserror",
 ]
 
 [[package]]
@@ -201,6 +203,20 @@ name = "ctl-md-handler"
 version = "0.1.0"
 dependencies = [
  "atx-feed",
+ "atx-handler",
+ "ctl-feed",
+ "ctl-websocket",
+ "dpdk",
+]
+
+[[package]]
+name = "ctl-md-subscriber"
+version = "0.1.0"
+dependencies = [
+ "atx-feed",
+ "ctl-feed",
+ "ctl-websocket",
+ "dpdk",
 ]
 
 [[package]]
@@ -210,6 +226,19 @@ version = "0.1.0"
 [[package]]
 name = "ctl-parser"
 version = "0.1.0"
+dependencies = [
+ "atx-feed",
+]
+
+[[package]]
+name = "ctl-resource-manager"
+version = "0.1.0"
+dependencies = [
+ "atx-feed",
+ "ctl-feed",
+ "ctl-websocket",
+ "dpdk",
+]
 
 [[package]]
 name = "ctl-websocket"

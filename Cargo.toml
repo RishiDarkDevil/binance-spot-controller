@@ -52,12 +52,18 @@ arraystring = { version = "0.3.0", features = ["serde-traits"] }
 
 # internal (atomix-core/)
 
+# utils
+dpdk = { version = "0.1.0", path = "../atomix-core/lib/utils/rust-dpdk/dpdk"}
+
 # exchange
 atx-feed = { version = "0.1.0", path = "../atomix-core/lib/exchange/atx-feed" }
 
 # network
-atx-rest = { version = "0.1.0", path = "../atomix-core/lib/network/atx-rest"}
-atx-websocket = { version = "0.1.0", path = "../atomix-core/lib/network/atx-websocket"}
+atx-rest = { version = "0.1.0", path = "../atomix-core/lib/network/atx-rest" }
+atx-websocket = { version = "0.1.0", path = "../atomix-core/lib/network/atx-websocket" }
+
+# handler
+atx-handler = { version = "0.1.0", path = "../atomix-core/lib/handler/atx-handler" }
 
 # internal
 ctl-feed = { version = "0.1.0", path = "lib/ctl-feed" }

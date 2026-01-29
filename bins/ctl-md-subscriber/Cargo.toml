@@ -1,5 +1,5 @@
 [package]
-name = "ctl-md-handler"
+name = "ctl-md-subscriber"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
@@ -8,16 +8,12 @@ authors.workspace = true
 [dependencies]
 # external
 
-
 # internal (atomix-core/)
 # utils
 dpdk = { workspace = true }
 
 # exchange
 atx-feed = { workspace = true }
-
-# handler
-atx-handler = { workspace = true }
 
 # internal
 ctl-feed = { workspace = true }
