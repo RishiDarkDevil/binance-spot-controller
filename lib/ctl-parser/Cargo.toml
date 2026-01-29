@@ -9,5 +9,7 @@ authors.workspace = true
 # external
 
 # internal (atomix-core/)
+# exchange
+atx-feed = { workspace = true }
 
 # internal
