@@ -13,6 +13,9 @@ derive_more = { workspace = true }
 serde_json = { workspace = true }
 
 # internal (atomix-core/)
+# common
+atx-ring-registry = { workspace = true }
+
 # exchange
 atx-feed = { workspace = true }
 

@@ -1,8 +1,6 @@
 use std::error::Error;
 
-use atx_feed::FeedParseProtocol;
-use ctl_feed::{DummyParser, Top};
-use ctl_websocket::WSConn;
+use ctl_feed::RawMessage;
 use dpdk::{ConsumeStartState, DpdkEnvBuilder, DpdkProcessType};
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -12,18 +10,20 @@ fn main() -> Result<(), Box<dyn Error>> {
         .main_lcore_id(7)
         .build()?;
 
-    let ring = dpdk_env.pubsub::<<DummyParser as FeedParseProtocol<WSConn<Top>, Top>>::FeedParsedMessage>("TOP_PUBSUB", None)?;
+    // Look up the ring by name and type - must match what was registered
+    let ring = dpdk_env.pubsub_lookup::<RawMessage>("TOP_PUBSUB")?;
 
     let mut consumer = ring.attach_consumer()?;
 
     loop {
-        match consumer.consume_start(&ring) {
+        match consumer.consume_start() {
             ConsumeStartState::Success(mut guard) => {
-                let msg = guard.as_ref();
-                println!("Received message: {}", String::from_utf8_lossy(msg.get()));
-                if guard.retry() {
-                    continue;
+                match guard.try_commit() {
+                    Ok(_) => {},
+                    Err(_) => continue,
                 }
+                let msg = guard.as_ref();
+                println!("Received message: {}", String::from_utf8_lossy(&msg.get().data));
             },
             ConsumeStartState::InFlight(_) => {
                 // Another consumer is in-flight - retry
@@ -37,5 +37,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
+    #[allow(unreachable_code)]
     Ok(())
 }

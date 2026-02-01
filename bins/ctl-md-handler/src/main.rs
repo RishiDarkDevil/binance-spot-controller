@@ -1,8 +1,8 @@
 use std::error::Error;
 
-use atx_feed::{Feed, FeedGroup, FeedGroupConfig, FeedParseProtocol, FeedProtocol, Stream, Streams};
+use atx_feed::{Feed, FeedGroup, FeedGroupConfig, FeedProtocol, Stream, Streams};
 use atx_handler::{HandlerBuilder, HandlerRunner};
-use ctl_feed::{DummyParser, Top};
+use ctl_feed::{DummyParser, RawMessage, Top};
 use ctl_websocket::WSConn;
 use dpdk::{DpdkEnvBuilder, DpdkProcessType};
 
@@ -15,9 +15,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let dummy_parser = DummyParser;
 
-    let ring = dpdk_env
-        .pubsub::<<DummyParser as FeedParseProtocol<WSConn<Top>, Top>>::FeedParsedMessage>
-        ("TOP_PUBSUB", None)?;
+    // Look up the ring by name and type - must match what was registered
+    let ring = dpdk_env.pubsub_lookup::<RawMessage>("TOP_PUBSUB")?;
 
     let symbols = vec!["btcusdt", "ethusdt", "bnbusdt", "xrpusdt"];
     let mut streams = Streams::new();
@@ -26,7 +25,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     });
 
     let mut websocket_conn = WSConn::<Top>::new("wss://stream.binance.com:9443/ws")?;
-    websocket_conn.update(&streams)?;
+    FeedProtocol::update(&mut websocket_conn, &streams)?;
     let feeds = vec![Feed::new("TopFeed", websocket_conn)];
 
     let topfeedgroup_config = FeedGroupConfig {

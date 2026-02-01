@@ -9,6 +9,9 @@ authors.workspace = true
 # external
 
 # internal (atomix-core/)
+# common
+atx-ring-registry = { workspace = true }
+
 # utils
 dpdk = { workspace = true }
 

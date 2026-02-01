@@ -49,6 +49,15 @@ name = "atx-handler"
 version = "0.1.0"
 
 [[package]]
+name = "atx-ring-registry"
+version = "0.1.0"
+dependencies = [
+ "dpdk",
+ "inventory",
+ "thiserror",
+]
+
+[[package]]
 name = "atx-websocket"
 version = "0.1.0"
 dependencies = [
@@ -191,6 +200,7 @@ name = "ctl-feed"
 version = "0.1.0"
 dependencies = [
  "atx-feed",
+ "atx-ring-registry",
  "ctl-websocket",
  "derive_more",
  "dpdk",
@@ -235,6 +245,7 @@ name = "ctl-resource-manager"
 version = "0.1.0"
 dependencies = [
  "atx-feed",
+ "atx-ring-registry",
  "ctl-feed",
  "ctl-websocket",
  "dpdk",
@@ -557,6 +568,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "inventory"
+version = "0.3.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc61209c082fbeb19919bee74b176221b27223e27b65d781eb91af24eb1fb46e"
+dependencies = [
+ "rustversion",
+]
+
+[[package]]
 name = "itertools"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -843,6 +863,12 @@ dependencies = [
  "linux-raw-sys",
  "windows-sys 0.61.2",
 ]
+
+[[package]]
+name = "rustversion"
+version = "1.0.22"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
 
 [[package]]
 name = "same-file"

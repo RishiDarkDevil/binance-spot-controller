@@ -49,6 +49,9 @@ dpdk = { version = "0.1.0", path = "../rust-dpdk/dpdk" }
 
 # internal (atomix-core/)
 
+# common
+atx-ring-registry = { version = "0.1.0", path = "../atomix-core/lib/common/atx-ring-registry" }
+
 # exchange
 atx-feed = { version = "0.1.0", path = "../atomix-core/lib/exchange/atx-feed" }
 
