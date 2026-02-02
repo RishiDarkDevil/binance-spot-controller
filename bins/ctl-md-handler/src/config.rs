@@ -1,7 +1,7 @@
 //! Configuration module for the Market Data Handler.
 //!
 //! This module provides the YAML parser and validation for hardware resources
-//! configuration defined in `configs/md/hw-resources.yaml`.
+//! configuration defined in `configs/market-data/hw-resources.yaml`.
 
 use atx_handler::{HandlerConfig, HandlerWorkerConfig};
 use serde::Deserialize;
@@ -12,7 +12,38 @@ use std::ops::RangeInclusive;
 
 use crate::HwResourcesConfigError;
 
-/// A named set of symbols with their own CPU and ring buffer configuration.
+/// A protocol/parser combination for data transmission.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Hash)]
+pub struct Medium {
+    /// Protocol type (e.g., "websocket").
+    pub protocol: String,
+    /// Parser type (e.g., "json", "sbe", "fix").
+    pub parser: String,
+}
+
+impl Medium {
+    /// Validates the medium configuration.
+    fn validate(&self) -> Result<(), HwResourcesConfigError> {
+        if self.protocol.is_empty() {
+            return Err(HwResourcesConfigError::ValidationError(
+                "Medium protocol cannot be empty".to_string(),
+            ));
+        }
+        if self.parser.is_empty() {
+            return Err(HwResourcesConfigError::ValidationError(
+                "Medium parser cannot be empty".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Returns a string representation of the medium.
+    pub fn name(&self) -> String {
+        format!("{}/{}", self.protocol, self.parser)
+    }
+}
+
+/// A named set of symbols with their own CPU, ring buffer, and medium configuration.
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct SymbolSet {
     /// Name of this symbol set (e.g., "A", "B").
@@ -23,6 +54,8 @@ pub struct SymbolSet {
     pub ring_size: u32,
     /// List of symbols in this set.
     pub symbols: Vec<String>,
+    /// List of protocol/parser mediums for this set.
+    pub medium: Vec<Medium>,
 }
 
 impl SymbolSet {
@@ -72,6 +105,30 @@ impl SymbolSet {
             }
         }
 
+        // Validate medium list is not empty
+        if self.medium.is_empty() {
+            return Err(HwResourcesConfigError::ValidationError(format!(
+                "Symbol set '{}' must have at least one medium",
+                self.name
+            )));
+        }
+
+        // Validate each medium
+        for m in &self.medium {
+            m.validate()?;
+        }
+
+        // Check for duplicate mediums within the set
+        let mut seen_mediums = HashSet::new();
+        for m in &self.medium {
+            if !seen_mediums.insert(m.name()) {
+                return Err(HwResourcesConfigError::ValidationError(format!(
+                    "Duplicate medium '{}' in set '{}'",
+                    m.name(), self.name
+                )));
+            }
+        }
+
         Ok(())
     }
 }
@@ -79,16 +136,12 @@ impl SymbolSet {
 /// Configuration for a single feed.
 ///
 /// A feed can either have:
-/// - Direct configuration with `num_cpus`, `ring_size`, and `symbols`
-/// - Named `sets` that group symbols with their own configurations
+/// - Direct configuration with `num_cpus`, `ring_size`, `symbols`, and `medium`
+/// - Named `sets` that group symbols with their own configurations including `medium`
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct FeedConfig {
-    /// Protocol type (e.g., "websocket").
-    pub protocol: String,
     /// Feed kind (e.g., "top", "trade").
     pub kind: String,
-    /// Parser type (e.g., "json").
-    pub parser: String,
     /// Number of CPU cores to use (used when not using sets).
     pub num_cpus: Option<u32>,
     /// Ring buffer size (used when not using sets).
@@ -96,28 +149,22 @@ pub struct FeedConfig {
     /// List of symbols for this feed (used when not using sets).
     #[serde(default)]
     pub symbols: Vec<String>,
+    /// List of protocol/parser mediums (used when not using sets).
+    #[serde(default)]
+    pub medium: Vec<Medium>,
     /// Optional named symbol sets with individual configurations.
     #[serde(default)]
     pub sets: Vec<SymbolSet>,
 }
 
 impl FeedConfig {
-    /// Returns the feed name derived from protocol, kind, and parser.
-    pub fn name(&self) -> String {
-        format!("{}/{}/{}", self.protocol, self.kind, self.parser)
+    /// Returns the feed kind.
+    pub fn name(&self) -> &str {
+        &self.kind
     }
 
     /// Validates the feed configuration.
     fn validate(&self) -> Result<(), HwResourcesConfigError> {
-        let feed_name = self.name();
-
-        // Validate protocol is not empty
-        if self.protocol.is_empty() {
-            return Err(HwResourcesConfigError::ValidationError(
-                "Feed protocol cannot be empty".to_string(),
-            ));
-        }
-
         // Validate kind is not empty
         if self.kind.is_empty() {
             return Err(HwResourcesConfigError::ValidationError(
@@ -125,21 +172,14 @@ impl FeedConfig {
             ));
         }
 
-        // Validate parser is not empty
-        if self.parser.is_empty() {
-            return Err(HwResourcesConfigError::ValidationError(
-                "Feed parser cannot be empty".to_string(),
-            ));
-        }
-
         // Check if using sets or direct configuration
         let has_sets = !self.sets.is_empty();
-        let has_direct = self.num_cpus.is_some() || self.ring_size.is_some() || !self.symbols.is_empty();
+        let has_direct = self.num_cpus.is_some() || self.ring_size.is_some() || !self.symbols.is_empty() || !self.medium.is_empty();
 
         if has_sets && has_direct {
             return Err(HwResourcesConfigError::ValidationError(format!(
-                "Feed '{}' cannot have both 'sets' and direct configuration (num_cpus/ring_size/symbols)",
-                feed_name
+                "Feed '{}' cannot have both 'sets' and direct configuration (num_cpus/ring_size/symbols/medium)",
+                self.kind
             )));
         }
 
@@ -155,7 +195,7 @@ impl FeedConfig {
                 if !seen_names.insert(set.name.as_str()) {
                     return Err(HwResourcesConfigError::ValidationError(format!(
                         "Duplicate set name '{}' in feed '{}'",
-                        set.name, feed_name
+                        set.name, self.kind
                     )));
                 }
             }
@@ -167,7 +207,7 @@ impl FeedConfig {
                     if !all_symbols.insert(symbol.as_str()) {
                         return Err(HwResourcesConfigError::ValidationError(format!(
                             "Duplicate symbol '{}' across sets in feed '{}'",
-                            symbol, feed_name
+                            symbol, self.kind
                         )));
                     }
                 }
@@ -177,14 +217,14 @@ impl FeedConfig {
             if self.num_cpus.is_none() {
                 return Err(HwResourcesConfigError::ValidationError(format!(
                     "Feed '{}' must specify 'num_cpus' when not using sets",
-                    feed_name
+                    self.kind
                 )));
             }
 
             if self.ring_size.is_none() {
                 return Err(HwResourcesConfigError::ValidationError(format!(
                     "Feed '{}' must specify 'ring_size' when not using sets",
-                    feed_name
+                    self.kind
                 )));
             }
 
@@ -193,7 +233,7 @@ impl FeedConfig {
                 if !ring_size.is_power_of_two() {
                     return Err(HwResourcesConfigError::ValidationError(format!(
                         "Ring size {} for feed '{}' must be a power of 2",
-                        ring_size, feed_name
+                        ring_size, self.kind
                     )));
                 }
             }
@@ -201,7 +241,7 @@ impl FeedConfig {
             if self.symbols.is_empty() {
                 return Err(HwResourcesConfigError::ValidationError(format!(
                     "Feed '{}' must have at least one symbol when not using sets",
-                    feed_name
+                    self.kind
                 )));
             }
 
@@ -210,7 +250,7 @@ impl FeedConfig {
                 if symbol.is_empty() {
                     return Err(HwResourcesConfigError::ValidationError(format!(
                         "Feed '{}' contains an empty symbol",
-                        feed_name
+                        self.kind
                     )));
                 }
             }
@@ -221,7 +261,31 @@ impl FeedConfig {
                 if !seen.insert(symbol.as_str()) {
                     return Err(HwResourcesConfigError::ValidationError(format!(
                         "Duplicate symbol '{}' in feed '{}'",
-                        symbol, feed_name
+                        symbol, self.kind
+                    )));
+                }
+            }
+
+            // Validate medium list is not empty
+            if self.medium.is_empty() {
+                return Err(HwResourcesConfigError::ValidationError(format!(
+                    "Feed '{}' must have at least one medium when not using sets",
+                    self.kind
+                )));
+            }
+
+            // Validate each medium
+            for m in &self.medium {
+                m.validate()?;
+            }
+
+            // Check for duplicate mediums
+            let mut seen_mediums = HashSet::new();
+            for m in &self.medium {
+                if !seen_mediums.insert(m.name()) {
+                    return Err(HwResourcesConfigError::ValidationError(format!(
+                        "Duplicate medium '{}' in feed '{}'",
+                        m.name(), self.kind
                     )));
                 }
             }
@@ -245,6 +309,18 @@ impl FeedConfig {
     /// Returns whether this feed uses symbol sets.
     pub fn uses_sets(&self) -> bool {
         !self.sets.is_empty()
+    }
+
+    /// Returns all mediums across all sets or direct medium list.
+    pub fn all_mediums(&self) -> Vec<&Medium> {
+        if !self.sets.is_empty() {
+            self.sets
+                .iter()
+                .flat_map(|s| s.medium.iter())
+                .collect()
+        } else {
+            self.medium.iter().collect()
+        }
     }
 }
 
@@ -276,14 +352,14 @@ impl PubSubConfig {
             feed_wrapper.feed.validate()?;
         }
 
-        // Check for duplicate feed names
-        let mut seen_names = HashSet::new();
+        // Check for duplicate feed kinds
+        let mut seen_kinds = HashSet::new();
         for feed_wrapper in &self.pubsubs {
-            let feed_name = feed_wrapper.feed.name();
-            if !seen_names.insert(feed_name.clone()) {
+            let feed_kind = &feed_wrapper.feed.kind;
+            if !seen_kinds.insert(feed_kind.clone()) {
                 return Err(HwResourcesConfigError::ValidationError(format!(
-                    "Duplicate feed name '{}'",
-                    feed_name
+                    "Duplicate feed kind '{}'",
+                    feed_kind
                 )));
             }
         }
@@ -456,9 +532,9 @@ impl HwResourcesConfig {
             .flat_map(|ps| ps.pubsubs.iter().map(|fw| &fw.feed))
     }
 
-    /// Finds a feed by name.
-    pub fn find_feed(&self, name: &str) -> Option<&FeedConfig> {
-        self.all_feeds().find(|f| f.name() == name)
+    /// Finds a feed by kind.
+    pub fn find_feed(&self, kind: &str) -> Option<&FeedConfig> {
+        self.all_feeds().find(|f| f.kind == kind)
     }
 
     /// Returns all unique symbols across all feeds.
@@ -505,9 +581,7 @@ mod tests {
 - worker_cpus: 1-12
 - pubsubs:
     - feed:
-        protocol: websocket
         kind: top
-        parser: json
         sets:
           - name: A
             num_cpus: 4
@@ -516,6 +590,11 @@ mod tests {
               - BTCUSDT
               - ETHUSDT
               - SOLUSDT
+            medium:
+              - protocol: websocket
+                parser: json
+              - protocol: websocket
+                parser: sbe
           - name: B
             num_cpus: 4
             ring_size: 65536
@@ -523,16 +602,20 @@ mod tests {
               - ADAUSDT
               - XRPUSDT
               - DOTUSDT
+            medium:
+              - protocol: websocket
+                parser: json
     - feed:
-        protocol: websocket
         kind: trade
-        parser: json
         num_cpus: 4
         ring_size: 65536
         symbols:
           - BTCUSDT
           - ETHUSDT
           - SOLUSDT
+        medium:
+          - protocol: websocket
+            parser: json
 "#;
 
     #[test]
@@ -544,18 +627,18 @@ mod tests {
         assert_eq!(config.pubsub_configs.len(), 1);
         assert_eq!(config.pubsub_configs[0].pubsubs.len(), 2);
         
-        let top_feed = config.find_feed("websocket/top/json").expect("websocket/top/json feed not found");
+        let top_feed = config.find_feed("top").expect("top feed not found");
         assert!(top_feed.uses_sets());
         assert_eq!(top_feed.sets.len(), 2);
-        assert_eq!(top_feed.protocol, "websocket");
         assert_eq!(top_feed.kind, "top");
-        assert_eq!(top_feed.parser, "json");
+        assert_eq!(top_feed.sets[0].medium.len(), 2);
         
-        let trade_feed = config.find_feed("websocket/trade/json").expect("websocket/trade/json feed not found");
+        let trade_feed = config.find_feed("trade").expect("trade feed not found");
         assert!(!trade_feed.uses_sets());
         assert_eq!(trade_feed.num_cpus, Some(4));
         assert_eq!(trade_feed.ring_size, Some(65536));
         assert_eq!(trade_feed.symbols.len(), 3);
+        assert_eq!(trade_feed.medium.len(), 1);
     }
 
     #[test]
@@ -572,19 +655,35 @@ mod tests {
     }
 
     #[test]
+    fn test_all_mediums() {
+        let config = HwResourcesConfig::from_str(VALID_CONFIG).expect("Failed to parse config");
+        
+        let top_feed = config.find_feed("top").expect("top feed not found");
+        let mediums = top_feed.all_mediums();
+        assert_eq!(mediums.len(), 3); // 2 from set A + 1 from set B
+        
+        let trade_feed = config.find_feed("trade").expect("trade feed not found");
+        let mediums = trade_feed.all_mediums();
+        assert_eq!(mediums.len(), 1);
+        assert_eq!(mediums[0].protocol, "websocket");
+        assert_eq!(mediums[0].parser, "json");
+    }
+
+    #[test]
     fn test_invalid_ring_size() {
         let config_str = r#"
 - main_cpu: 0
 - worker_cpus: 1-4
 - pubsubs:
     - feed:
-        protocol: websocket
         kind: test
-        parser: json
         num_cpus: 1
         ring_size: 1000
         symbols:
           - TEST
+        medium:
+          - protocol: websocket
+            parser: json
 "#;
         let result = HwResourcesConfig::from_str(config_str);
         assert!(result.is_err());
@@ -592,23 +691,24 @@ mod tests {
     }
 
     #[test]
-    fn test_empty_protocol() {
+    fn test_empty_kind() {
         let config_str = r#"
 - main_cpu: 0
 - worker_cpus: 1-4
 - pubsubs:
     - feed:
-        protocol: ""
-        kind: test
-        parser: json
+        kind: ""
         num_cpus: 1
         ring_size: 1024
         symbols:
           - TEST
+        medium:
+          - protocol: websocket
+            parser: json
 "#;
         let result = HwResourcesConfig::from_str(config_str);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("protocol cannot be empty"));
+        assert!(result.unwrap_err().to_string().contains("kind cannot be empty"));
     }
 
     #[test]
@@ -618,14 +718,15 @@ mod tests {
 - worker_cpus: 1-4
 - pubsubs:
     - feed:
-        protocol: websocket
         kind: test
-        parser: json
         num_cpus: 1
         ring_size: 1024
         symbols:
           - TEST
           - TEST
+        medium:
+          - protocol: websocket
+            parser: json
 "#;
         let result = HwResourcesConfig::from_str(config_str);
         assert!(result.is_err());
@@ -639,20 +740,24 @@ mod tests {
 - worker_cpus: 1-4
 - pubsubs:
     - feed:
-        protocol: websocket
         kind: test
-        parser: json
         sets:
           - name: A
             num_cpus: 1
             ring_size: 1024
             symbols:
               - TEST1
+            medium:
+              - protocol: websocket
+                parser: json
           - name: A
             num_cpus: 2
             ring_size: 1024
             symbols:
               - TEST2
+            medium:
+              - protocol: websocket
+                parser: json
 "#;
         let result = HwResourcesConfig::from_str(config_str);
         assert!(result.is_err());
@@ -666,12 +771,13 @@ mod tests {
 - worker_cpus: 1-4
 - pubsubs:
     - feed:
-        protocol: websocket
         kind: test
-        parser: json
         ring_size: 1024
         symbols:
           - TEST
+        medium:
+          - protocol: websocket
+            parser: json
 "#;
         let result = HwResourcesConfig::from_str(config_str);
         assert!(result.is_err());
@@ -691,15 +797,13 @@ mod tests {
     }
 
     #[test]
-    fn test_empty_kind() {
+    fn test_missing_medium() {
         let config_str = r#"
 - main_cpu: 0
 - worker_cpus: 1-4
 - pubsubs:
     - feed:
-        protocol: websocket
-        kind: ""
-        parser: json
+        kind: test
         num_cpus: 1
         ring_size: 1024
         symbols:
@@ -707,23 +811,45 @@ mod tests {
 "#;
         let result = HwResourcesConfig::from_str(config_str);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("kind cannot be empty"));
+        assert!(result.unwrap_err().to_string().contains("at least one medium"));
     }
 
     #[test]
-    fn test_empty_parser() {
+    fn test_empty_protocol_in_medium() {
         let config_str = r#"
 - main_cpu: 0
 - worker_cpus: 1-4
 - pubsubs:
     - feed:
-        protocol: websocket
         kind: test
-        parser: ""
         num_cpus: 1
         ring_size: 1024
         symbols:
           - TEST
+        medium:
+          - protocol: ""
+            parser: json
+"#;
+        let result = HwResourcesConfig::from_str(config_str);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("protocol cannot be empty"));
+    }
+
+    #[test]
+    fn test_empty_parser_in_medium() {
+        let config_str = r#"
+- main_cpu: 0
+- worker_cpus: 1-4
+- pubsubs:
+    - feed:
+        kind: test
+        num_cpus: 1
+        ring_size: 1024
+        symbols:
+          - TEST
+        medium:
+          - protocol: websocket
+            parser: ""
 "#;
         let result = HwResourcesConfig::from_str(config_str);
         assert!(result.is_err());
@@ -736,13 +862,14 @@ mod tests {
 - worker_cpus: 1-4
 - pubsubs:
     - feed:
-        protocol: websocket
         kind: test
-        parser: json
         num_cpus: 1
         ring_size: 1024
         symbols:
           - TEST
+        medium:
+          - protocol: websocket
+            parser: json
 "#;
         let result = HwResourcesConfig::from_str(config_str);
         assert!(result.is_err());
@@ -755,13 +882,14 @@ mod tests {
 - main_cpu: 0
 - pubsubs:
     - feed:
-        protocol: websocket
         kind: test
-        parser: json
         num_cpus: 1
         ring_size: 1024
         symbols:
           - TEST
+        medium:
+          - protocol: websocket
+            parser: json
 "#;
         let result = HwResourcesConfig::from_str(config_str);
         assert!(result.is_err());
@@ -775,16 +903,42 @@ mod tests {
 - worker_cpus: 1,2,3
 - pubsubs:
     - feed:
-        protocol: websocket
         kind: test
-        parser: json
         num_cpus: 1
         ring_size: 1024
         symbols:
           - TEST
+        medium:
+          - protocol: websocket
+            parser: json
 "#;
         let result = HwResourcesConfig::from_str(config_str);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Invalid worker_cpus format"));
+    }
+
+    #[test]
+    fn test_duplicate_medium_in_set() {
+        let config_str = r#"
+- main_cpu: 0
+- worker_cpus: 1-4
+- pubsubs:
+    - feed:
+        kind: test
+        sets:
+          - name: A
+            num_cpus: 1
+            ring_size: 1024
+            symbols:
+              - TEST
+            medium:
+              - protocol: websocket
+                parser: json
+              - protocol: websocket
+                parser: json
+"#;
+        let result = HwResourcesConfig::from_str(config_str);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Duplicate medium"));
     }
 }

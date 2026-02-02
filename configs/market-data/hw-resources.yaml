@@ -1,28 +1,34 @@
 # This is the configuration file for the hardware resources required by the Market Data Handler.
 #
 # Structure:
-#   - pubsubs:                   # List of pub/sub configurations
+#   - main_cpu: <cpu>              # CPU core for main thread
+#   - worker_cpus: <range>         # CPU range for workers (e.g., "1-12")
+#   - pubsubs:                     # List of pub/sub configurations
 #       - feed:
-#           protocol: <protocol> # Protocol type (e.g., websocket)
-#           kind: <kind>         # Feed kind (e.g., top, trade)
-#           parser: <parser>     # Parser type (e.g., json)
-#           num_cpus: <count>    # Number of CPU cores to use
-#           ring_size: <size>    # Ring buffer size
-#           symbols: [...]       # List of symbols for this feed
-#           sets:                # Optional: group symbols into named sets
+#           kind: <kind>           # Feed kind (e.g., top, trade)
+#           # Either use 'sets' for grouped symbols:
+#           sets:
 #             - name: <set_name>
 #               num_cpus: <count>
 #               ring_size: <size>
 #               symbols: [...]
+#               medium:            # Protocol/parser combinations
+#                 - protocol: <protocol>
+#                   parser: <parser>
+#           # Or use direct configuration:
+#           num_cpus: <count>
+#           ring_size: <size>
+#           symbols: [...]
+#           medium:
+#             - protocol: <protocol>
+#               parser: <parser>
 #
 
 - main_cpu: 0
 - worker_cpus: 1-12
 - pubsubs:
   - feed:
-    protocol: websocket
     kind: top
-    parser: json
     sets:
     - name: A
       num_cpus: 4
@@ -31,6 +37,13 @@
         - BTCUSDT
         - ETHUSDT
         - SOLUSDT
+      medium:
+        - protocol: websocket
+          parser: json
+        - protocol: websocket
+          parser: sbe
+        - protocol: websocket
+          parser: fix
     - name: B
       num_cpus: 4
       ring_size: 65536
@@ -38,13 +51,17 @@
         - ADAUSDT
         - XRPUSDT
         - DOTUSDT
+      medium:
+        - protocol: websocket
+          parser: json
   - feed:
-    protocol: websocket
     kind: trade
-    parser: json
     num_cpus: 4
     ring_size: 65536
     symbols:
       - BTCUSDT
       - ETHUSDT
       - SOLUSDT
+    medium:
+      - protocol: websocket
+        parser: json
