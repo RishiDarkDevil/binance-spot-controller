@@ -1,12 +1,12 @@
 - BTCUSDT:
-  id: 0
+    id: 0
 - ETHUSDT:
-  id: 1
+    id: 1
 - SOLUSDT:
-  id: 2
+    id: 2
 - ADAUSDT:
-  id: 3
+    id: 3
 - XRPUSDT:
-  id: 4
+    id: 4
 - DOTUSDT:
-  id: 5
+    id: 5

@@ -5,12 +5,12 @@
 
 use atx_handler::{HandlerConfig, HandlerWorkerConfig};
 use serde::Deserialize;
-use hashbrown::HashSet;
+use hashbrown::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 use std::ops::RangeInclusive;
 
-use crate::HwResourcesConfigError;
+use crate::{HwResourcesConfigError, SymbolInfoConfigError};
 
 /// A protocol/parser combination for data transmission.
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Hash)]
@@ -569,6 +569,129 @@ impl HandlerWorkerConfig for SymbolSet {
     fn validate(&self) -> Result<(), Self::WorkerValidationError> {
         // Re-use the internal validation
         SymbolSet::validate(self)
+    }
+}
+
+// ============================================================================
+// Symbol Info Configuration
+// ============================================================================
+
+/// A single symbol's information.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SymbolInfo {
+    /// Symbol name (e.g., "BTCUSDT").
+    pub name: String,
+    /// Unique numeric ID for the symbol.
+    pub id: u32,
+}
+
+/// Helper struct for YAML parsing (matches the YAML format).
+#[derive(Debug, Clone, Deserialize)]
+struct SymbolInfoEntry {
+    id: u32,
+}
+
+/// Configuration holding all symbol information.
+///
+/// Provides O(1) lookup by both symbol name and ID.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SymbolInfoConfig {
+    /// Symbols indexed by name for O(1) lookup.
+    symbols_by_name: HashMap<String, SymbolInfo>,
+    /// Symbols indexed by ID for O(1) lookup.
+    symbols_by_id: HashMap<u32, SymbolInfo>,
+}
+
+impl SymbolInfoConfig {
+    /// Parses the symbol info configuration from a YAML file.
+    ///
+    /// # Arguments
+    /// * `path` - Path to the YAML configuration file.
+    ///
+    /// # Returns
+    /// A validated `SymbolInfoConfig` instance.
+    ///
+    /// # Errors
+    /// Returns an error if the file cannot be read, parsed, or contains duplicates.
+    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, SymbolInfoConfigError> {
+        let content = fs::read_to_string(path)?;
+        Self::from_str(&content)
+    }
+
+    /// Parses the symbol info configuration from a YAML string.
+    ///
+    /// # Arguments
+    /// * `content` - YAML configuration string.
+    ///
+    /// # Returns
+    /// A validated `SymbolInfoConfig` instance.
+    ///
+    /// # Errors
+    /// Returns an error if the YAML cannot be parsed or contains duplicates.
+    pub fn from_str(content: &str) -> Result<Self, SymbolInfoConfigError> {
+        // Parse as Vec of single-key maps (use std::collections::HashMap for serde)
+        let entries: Vec<std::collections::HashMap<String, SymbolInfoEntry>> =
+            serde_yaml::from_str(content)?;
+
+        let mut symbols_by_name = HashMap::new();
+        let mut symbols_by_id = HashMap::new();
+
+        for entry in entries {
+            for (name, info) in entry {
+                let symbol_info = SymbolInfo {
+                    name: name.clone(),
+                    id: info.id,
+                };
+
+                // Check for duplicate IDs
+                if symbols_by_id.contains_key(&info.id) {
+                    return Err(SymbolInfoConfigError::DuplicateId(info.id));
+                }
+
+                // Check for duplicate names
+                if symbols_by_name.contains_key(&name) {
+                    return Err(SymbolInfoConfigError::DuplicateName(name));
+                }
+
+                symbols_by_name.insert(name, symbol_info.clone());
+                symbols_by_id.insert(info.id, symbol_info);
+            }
+        }
+
+        Ok(Self {
+            symbols_by_name,
+            symbols_by_id,
+        })
+    }
+
+    /// Get symbol info by name.
+    pub fn get_by_name(&self, name: &str) -> Option<&SymbolInfo> {
+        self.symbols_by_name.get(name)
+    }
+
+    /// Get symbol info by ID.
+    pub fn get_by_id(&self, id: u32) -> Option<&SymbolInfo> {
+        self.symbols_by_id.get(&id)
+    }
+
+    /// Get symbol ID by name.
+    pub fn symbol_id(&self, name: &str) -> Option<u32> {
+        self.symbols_by_name.get(name).map(|s| s.id)
+    }
+
+    /// Iterator over all symbols.
+    pub fn symbols(&self) -> impl Iterator<Item = &SymbolInfo> {
+        self.symbols_by_name.values()
+    }
+
+    /// Number of symbols.
+    pub fn len(&self) -> usize {
+        self.symbols_by_name.len()
+    }
+
+    /// Returns true if there are no symbols.
+    pub fn is_empty(&self) -> bool {
+        self.symbols_by_name.is_empty()
     }
 }
 

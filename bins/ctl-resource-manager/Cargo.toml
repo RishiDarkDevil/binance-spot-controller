@@ -10,6 +10,7 @@ authors.workspace = true
 serde = { workspace = true }
 serde_yaml = { workspace = true }
 thiserror = { workspace = true }
+hashbrown = { workspace = true }
 
 # internal (atomix-core/)
 
@@ -25,6 +26,7 @@ atx-handler = { workspace = true }
 # internal
 ctl-feed = { workspace = true }
 ctl-websocket = { workspace = true }
+ctl-md-handler = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

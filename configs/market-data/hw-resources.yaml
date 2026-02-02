@@ -27,41 +27,41 @@
 - main_cpu: 0
 - worker_cpus: 1-12
 - pubsubs:
-  - feed:
-    kind: top
-    sets:
-    - name: A
-      num_cpus: 4
-      ring_size: 65536
-      symbols:
-        - BTCUSDT
-        - ETHUSDT
-        - SOLUSDT
-      medium:
-        - protocol: websocket
-          parser: json
-        - protocol: websocket
-          parser: sbe
-        - protocol: websocket
-          parser: fix
-    - name: B
-      num_cpus: 4
-      ring_size: 65536
-      symbols:
-        - ADAUSDT
-        - XRPUSDT
-        - DOTUSDT
-      medium:
-        - protocol: websocket
-          parser: json
-  - feed:
-    kind: trade
-    num_cpus: 4
-    ring_size: 65536
-    symbols:
-      - BTCUSDT
-      - ETHUSDT
-      - SOLUSDT
-    medium:
-      - protocol: websocket
-        parser: json
+    - feed:
+        kind: top
+        sets:
+          - name: A
+            num_cpus: 4
+            ring_size: 65536
+            symbols:
+              - BTCUSDT
+              - ETHUSDT
+              - SOLUSDT
+            medium:
+              - protocol: websocket
+                parser: json
+              - protocol: websocket
+                parser: sbe
+              - protocol: websocket
+                parser: fix
+          - name: B
+            num_cpus: 4
+            ring_size: 65536
+            symbols:
+              - ADAUSDT
+              - XRPUSDT
+              - DOTUSDT
+            medium:
+              - protocol: websocket
+                parser: json
+    - feed:
+        kind: trade
+        num_cpus: 4
+        ring_size: 65536
+        symbols:
+          - BTCUSDT
+          - ETHUSDT
+          - SOLUSDT
+        medium:
+          - protocol: websocket
+            parser: json

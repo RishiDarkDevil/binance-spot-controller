@@ -64,3 +64,5 @@ atx-handler = { version = "0.1.0", path = "../atomix-core/lib/handler/atx-handle
 # internal
 ctl-feed = { version = "0.1.0", path = "lib/ctl-feed" }
 ctl-websocket = { version = "0.1.0", path = "lib/ctl-websocket" }
+
+ctl-md-handler = { version = "0.1.0", path = "bins/ctl-md-handler" }
