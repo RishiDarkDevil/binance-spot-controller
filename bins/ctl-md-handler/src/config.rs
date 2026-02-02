@@ -1,0 +1,790 @@
+//! Configuration module for the Market Data Handler.
+//!
+//! This module provides the YAML parser and validation for hardware resources
+//! configuration defined in `configs/md/hw-resources.yaml`.
+
+use atx_handler::{HandlerConfig, HandlerWorkerConfig};
+use serde::Deserialize;
+use hashbrown::HashSet;
+use std::fs;
+use std::path::Path;
+use std::ops::RangeInclusive;
+
+use crate::HwResourcesConfigError;
+
+/// A named set of symbols with their own CPU and ring buffer configuration.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct SymbolSet {
+    /// Name of this symbol set (e.g., "A", "B").
+    pub name: String,
+    /// Number of CPU cores to use for this set.
+    pub num_cpus: u32,
+    /// Ring buffer size for this set.
+    pub ring_size: u32,
+    /// List of symbols in this set.
+    pub symbols: Vec<String>,
+}
+
+impl SymbolSet {
+    /// Validates the symbol set configuration.
+    fn validate(&self) -> Result<(), HwResourcesConfigError> {
+        // Validate set name is not empty
+        if self.name.is_empty() {
+            return Err(HwResourcesConfigError::ValidationError(
+                "Symbol set name cannot be empty".to_string(),
+            ));
+        }
+
+        // Validate ring_size is a power of 2
+        if !self.ring_size.is_power_of_two() {
+            return Err(HwResourcesConfigError::ValidationError(format!(
+                "Ring size {} for set '{}' must be a power of 2",
+                self.ring_size, self.name
+            )));
+        }
+
+        // Validate symbols list is not empty
+        if self.symbols.is_empty() {
+            return Err(HwResourcesConfigError::ValidationError(format!(
+                "Symbol set '{}' must have at least one symbol",
+                self.name
+            )));
+        }
+
+        // Validate each symbol is not empty
+        for symbol in &self.symbols {
+            if symbol.is_empty() {
+                return Err(HwResourcesConfigError::ValidationError(format!(
+                    "Symbol set '{}' contains an empty symbol",
+                    self.name
+                )));
+            }
+        }
+
+        // Check for duplicate symbols within the set
+        let mut seen = HashSet::new();
+        for symbol in &self.symbols {
+            if !seen.insert(symbol.as_str()) {
+                return Err(HwResourcesConfigError::ValidationError(format!(
+                    "Duplicate symbol '{}' in set '{}'",
+                    symbol, self.name
+                )));
+            }
+        }
+
+        Ok(())
+    }
+}
+
+/// Configuration for a single feed.
+///
+/// A feed can either have:
+/// - Direct configuration with `num_cpus`, `ring_size`, and `symbols`
+/// - Named `sets` that group symbols with their own configurations
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct FeedConfig {
+    /// Protocol type (e.g., "websocket").
+    pub protocol: String,
+    /// Feed kind (e.g., "top", "trade").
+    pub kind: String,
+    /// Parser type (e.g., "json").
+    pub parser: String,
+    /// Number of CPU cores to use (used when not using sets).
+    pub num_cpus: Option<u32>,
+    /// Ring buffer size (used when not using sets).
+    pub ring_size: Option<u32>,
+    /// List of symbols for this feed (used when not using sets).
+    #[serde(default)]
+    pub symbols: Vec<String>,
+    /// Optional named symbol sets with individual configurations.
+    #[serde(default)]
+    pub sets: Vec<SymbolSet>,
+}
+
+impl FeedConfig {
+    /// Returns the feed name derived from protocol, kind, and parser.
+    pub fn name(&self) -> String {
+        format!("{}/{}/{}", self.protocol, self.kind, self.parser)
+    }
+
+    /// Validates the feed configuration.
+    fn validate(&self) -> Result<(), HwResourcesConfigError> {
+        let feed_name = self.name();
+
+        // Validate protocol is not empty
+        if self.protocol.is_empty() {
+            return Err(HwResourcesConfigError::ValidationError(
+                "Feed protocol cannot be empty".to_string(),
+            ));
+        }
+
+        // Validate kind is not empty
+        if self.kind.is_empty() {
+            return Err(HwResourcesConfigError::ValidationError(
+                "Feed kind cannot be empty".to_string(),
+            ));
+        }
+
+        // Validate parser is not empty
+        if self.parser.is_empty() {
+            return Err(HwResourcesConfigError::ValidationError(
+                "Feed parser cannot be empty".to_string(),
+            ));
+        }
+
+        // Check if using sets or direct configuration
+        let has_sets = !self.sets.is_empty();
+        let has_direct = self.num_cpus.is_some() || self.ring_size.is_some() || !self.symbols.is_empty();
+
+        if has_sets && has_direct {
+            return Err(HwResourcesConfigError::ValidationError(format!(
+                "Feed '{}' cannot have both 'sets' and direct configuration (num_cpus/ring_size/symbols)",
+                feed_name
+            )));
+        }
+
+        if has_sets {
+            // Validate all sets
+            for set in &self.sets {
+                set.validate()?;
+            }
+
+            // Check for duplicate set names
+            let mut seen_names = HashSet::new();
+            for set in &self.sets {
+                if !seen_names.insert(set.name.as_str()) {
+                    return Err(HwResourcesConfigError::ValidationError(format!(
+                        "Duplicate set name '{}' in feed '{}'",
+                        set.name, feed_name
+                    )));
+                }
+            }
+
+            // Check for duplicate symbols across all sets
+            let mut all_symbols = HashSet::new();
+            for set in &self.sets {
+                for symbol in &set.symbols {
+                    if !all_symbols.insert(symbol.as_str()) {
+                        return Err(HwResourcesConfigError::ValidationError(format!(
+                            "Duplicate symbol '{}' across sets in feed '{}'",
+                            symbol, feed_name
+                        )));
+                    }
+                }
+            }
+        } else {
+            // Direct configuration - validate required fields
+            if self.num_cpus.is_none() {
+                return Err(HwResourcesConfigError::ValidationError(format!(
+                    "Feed '{}' must specify 'num_cpus' when not using sets",
+                    feed_name
+                )));
+            }
+
+            if self.ring_size.is_none() {
+                return Err(HwResourcesConfigError::ValidationError(format!(
+                    "Feed '{}' must specify 'ring_size' when not using sets",
+                    feed_name
+                )));
+            }
+
+            // Validate ring_size is a power of 2
+            if let Some(ring_size) = self.ring_size {
+                if !ring_size.is_power_of_two() {
+                    return Err(HwResourcesConfigError::ValidationError(format!(
+                        "Ring size {} for feed '{}' must be a power of 2",
+                        ring_size, feed_name
+                    )));
+                }
+            }
+
+            if self.symbols.is_empty() {
+                return Err(HwResourcesConfigError::ValidationError(format!(
+                    "Feed '{}' must have at least one symbol when not using sets",
+                    feed_name
+                )));
+            }
+
+            // Validate symbols are not empty
+            for symbol in &self.symbols {
+                if symbol.is_empty() {
+                    return Err(HwResourcesConfigError::ValidationError(format!(
+                        "Feed '{}' contains an empty symbol",
+                        feed_name
+                    )));
+                }
+            }
+
+            // Check for duplicate symbols
+            let mut seen = HashSet::new();
+            for symbol in &self.symbols {
+                if !seen.insert(symbol.as_str()) {
+                    return Err(HwResourcesConfigError::ValidationError(format!(
+                        "Duplicate symbol '{}' in feed '{}'",
+                        symbol, feed_name
+                    )));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Returns all symbols across all sets or direct symbols.
+    pub fn all_symbols(&self) -> Vec<&str> {
+        if !self.sets.is_empty() {
+            self.sets
+                .iter()
+                .flat_map(|s| s.symbols.iter().map(|sym| sym.as_str()))
+                .collect()
+        } else {
+            self.symbols.iter().map(|s| s.as_str()).collect()
+        }
+    }
+
+    /// Returns whether this feed uses symbol sets.
+    pub fn uses_sets(&self) -> bool {
+        !self.sets.is_empty()
+    }
+}
+
+/// Wrapper for a feed configuration in the YAML structure.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct FeedWrapper {
+    /// The feed configuration.
+    pub feed: FeedConfig,
+}
+
+/// Configuration for a pub/sub group.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct PubSubConfig {
+    /// List of feed configurations in this pub/sub group.
+    pub pubsubs: Vec<FeedWrapper>,
+}
+
+impl PubSubConfig {
+    /// Validates the pub/sub configuration.
+    fn validate(&self) -> Result<(), HwResourcesConfigError> {
+        if self.pubsubs.is_empty() {
+            return Err(HwResourcesConfigError::ValidationError(
+                "PubSub configuration must have at least one feed".to_string(),
+            ));
+        }
+
+        // Validate each feed
+        for feed_wrapper in &self.pubsubs {
+            feed_wrapper.feed.validate()?;
+        }
+
+        // Check for duplicate feed names
+        let mut seen_names = HashSet::new();
+        for feed_wrapper in &self.pubsubs {
+            let feed_name = feed_wrapper.feed.name();
+            if !seen_names.insert(feed_name.clone()) {
+                return Err(HwResourcesConfigError::ValidationError(format!(
+                    "Duplicate feed name '{}'",
+                    feed_name
+                )));
+            }
+        }
+
+        Ok(())
+    }
+}
+
+/// Represents a single configuration item in the YAML root array.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(untagged)]
+enum ConfigItem {
+    MainCpu {
+        main_cpu: u32,
+    },
+    WorkerCpus {
+        worker_cpus: String,
+    },
+    PubSubs {
+        pubsubs: Vec<FeedWrapper>,
+    },
+}
+
+/// The root hardware resources configuration.
+///
+/// This represents the entire `hw-resources.yaml` file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HwResourcesConfig {
+    /// Main CPU core for the handler.
+    pub main_cpu: u32,
+    /// Worker CPU range (e.g., "1-12" -> 1..=12).
+    pub worker_cpus: RangeInclusive<u32>,
+    /// List of pub/sub configurations.
+    pub pubsub_configs: Vec<PubSubConfig>,
+}
+
+impl HwResourcesConfig {
+    /// Parses the hardware resources configuration from a YAML file.
+    ///
+    /// # Arguments
+    /// * `path` - Path to the YAML configuration file.
+    ///
+    /// # Returns
+    /// A validated `HwResourcesConfig` instance.
+    ///
+    /// # Errors
+    /// Returns an error if the file cannot be read, parsed, or fails validation.
+    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, HwResourcesConfigError> {
+        let content = fs::read_to_string(path)?;
+        Self::from_str(&content)
+    }
+
+    /// Parses the hardware resources configuration from a YAML string.
+    ///
+    /// # Arguments
+    /// * `content` - YAML configuration string.
+    ///
+    /// # Returns
+    /// A validated `HwResourcesConfig` instance.
+    ///
+    /// # Errors
+    /// Returns an error if the YAML cannot be parsed or fails validation.
+    pub fn from_str(content: &str) -> Result<Self, HwResourcesConfigError> {
+        let items: Vec<ConfigItem> = serde_yaml::from_str(content)?;
+        
+        let mut main_cpu: Option<u32> = None;
+        let mut worker_cpus: Option<String> = None;
+        let mut pubsub_configs: Vec<PubSubConfig> = Vec::new();
+
+        for item in items {
+            match item {
+                ConfigItem::MainCpu { main_cpu: cpu } => {
+                    if main_cpu.is_some() {
+                        return Err(HwResourcesConfigError::ValidationError(
+                            "Duplicate 'main_cpu' configuration".to_string(),
+                        ));
+                    }
+                    main_cpu = Some(cpu);
+                }
+                ConfigItem::WorkerCpus { worker_cpus: cpus } => {
+                    if worker_cpus.is_some() {
+                        return Err(HwResourcesConfigError::ValidationError(
+                            "Duplicate 'worker_cpus' configuration".to_string(),
+                        ));
+                    }
+                    worker_cpus = Some(cpus);
+                }
+                ConfigItem::PubSubs { pubsubs } => {
+                    pubsub_configs.push(PubSubConfig { pubsubs });
+                }
+            }
+        }
+
+        let main_cpu = main_cpu.ok_or_else(|| {
+            HwResourcesConfigError::ValidationError(
+                "Missing 'main_cpu' configuration".to_string(),
+            )
+        })?;
+
+        let worker_cpus_str = worker_cpus.ok_or_else(|| {
+            HwResourcesConfigError::ValidationError(
+                "Missing 'worker_cpus' configuration".to_string(),
+            )
+        })?;
+
+        let worker_cpus = Self::parse_cpu_range(&worker_cpus_str)?;
+
+        let config = Self {
+            main_cpu,
+            worker_cpus,
+            pubsub_configs,
+        };
+        config.validate()?;
+        Ok(config)
+    }
+
+    /// Parses a CPU range string like "1-12" into a RangeInclusive.
+    fn parse_cpu_range(s: &str) -> Result<RangeInclusive<u32>, HwResourcesConfigError> {
+        let parts: Vec<&str> = s.split('-').collect();
+        if parts.len() != 2 {
+            return Err(HwResourcesConfigError::ValidationError(format!(
+                "Invalid worker_cpus format '{}'. Expected format: 'start-end' (e.g., '1-12')",
+                s
+            )));
+        }
+
+        let start: u32 = parts[0].trim().parse().map_err(|_| {
+            HwResourcesConfigError::ValidationError(format!(
+                "Invalid start CPU in worker_cpus '{}'",
+                s
+            ))
+        })?;
+
+        let end: u32 = parts[1].trim().parse().map_err(|_| {
+            HwResourcesConfigError::ValidationError(format!(
+                "Invalid end CPU in worker_cpus '{}'",
+                s
+            ))
+        })?;
+
+        if start > end {
+            return Err(HwResourcesConfigError::ValidationError(format!(
+                "Invalid worker_cpus range '{}': start ({}) must be <= end ({})",
+                s, start, end
+            )));
+        }
+
+        Ok(start..=end)
+    }
+
+    /// Validates the entire configuration.
+    fn validate(&self) -> Result<(), HwResourcesConfigError> {
+        if self.pubsub_configs.is_empty() {
+            return Err(HwResourcesConfigError::ValidationError(
+                "Configuration must have at least one pub/sub configuration".to_string(),
+            ));
+        }
+
+        for pubsub in &self.pubsub_configs {
+            pubsub.validate()?;
+        }
+
+        Ok(())
+    }
+
+    /// Returns an iterator over all feeds across all pub/sub configurations.
+    pub fn all_feeds(&self) -> impl Iterator<Item = &FeedConfig> {
+        self.pubsub_configs
+            .iter()
+            .flat_map(|ps| ps.pubsubs.iter().map(|fw| &fw.feed))
+    }
+
+    /// Finds a feed by name.
+    pub fn find_feed(&self, name: &str) -> Option<&FeedConfig> {
+        self.all_feeds().find(|f| f.name() == name)
+    }
+
+    /// Returns all unique symbols across all feeds.
+    pub fn all_symbols(&self) -> HashSet<&str> {
+        self.all_feeds()
+            .flat_map(|f| f.all_symbols())
+            .collect()
+    }
+}
+
+impl HandlerConfig for HwResourcesConfig {
+    type ValidationError = HwResourcesConfigError;
+
+    fn validate(&self) -> Result<(), Self::ValidationError> {
+        // Re-use the internal validation
+        HwResourcesConfig::validate(self)
+    }
+}
+
+impl HandlerWorkerConfig for FeedConfig {
+    type WorkerValidationError = HwResourcesConfigError;
+
+    fn validate(&self) -> Result<(), Self::WorkerValidationError> {
+        // Re-use the internal validation
+        FeedConfig::validate(self)
+    }
+}
+
+impl HandlerWorkerConfig for SymbolSet {
+    type WorkerValidationError = HwResourcesConfigError;
+
+    fn validate(&self) -> Result<(), Self::WorkerValidationError> {
+        // Re-use the internal validation
+        SymbolSet::validate(self)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const VALID_CONFIG: &str = r#"
+- main_cpu: 0
+- worker_cpus: 1-12
+- pubsubs:
+    - feed:
+        protocol: websocket
+        kind: top
+        parser: json
+        sets:
+          - name: A
+            num_cpus: 4
+            ring_size: 65536
+            symbols:
+              - BTCUSDT
+              - ETHUSDT
+              - SOLUSDT
+          - name: B
+            num_cpus: 4
+            ring_size: 65536
+            symbols:
+              - ADAUSDT
+              - XRPUSDT
+              - DOTUSDT
+    - feed:
+        protocol: websocket
+        kind: trade
+        parser: json
+        num_cpus: 4
+        ring_size: 65536
+        symbols:
+          - BTCUSDT
+          - ETHUSDT
+          - SOLUSDT
+"#;
+
+    #[test]
+    fn test_parse_valid_config() {
+        let config = HwResourcesConfig::from_str(VALID_CONFIG).expect("Failed to parse config");
+        
+        assert_eq!(config.main_cpu, 0);
+        assert_eq!(config.worker_cpus, 1..=12);
+        assert_eq!(config.pubsub_configs.len(), 1);
+        assert_eq!(config.pubsub_configs[0].pubsubs.len(), 2);
+        
+        let top_feed = config.find_feed("websocket/top/json").expect("websocket/top/json feed not found");
+        assert!(top_feed.uses_sets());
+        assert_eq!(top_feed.sets.len(), 2);
+        assert_eq!(top_feed.protocol, "websocket");
+        assert_eq!(top_feed.kind, "top");
+        assert_eq!(top_feed.parser, "json");
+        
+        let trade_feed = config.find_feed("websocket/trade/json").expect("websocket/trade/json feed not found");
+        assert!(!trade_feed.uses_sets());
+        assert_eq!(trade_feed.num_cpus, Some(4));
+        assert_eq!(trade_feed.ring_size, Some(65536));
+        assert_eq!(trade_feed.symbols.len(), 3);
+    }
+
+    #[test]
+    fn test_all_symbols() {
+        let config = HwResourcesConfig::from_str(VALID_CONFIG).expect("Failed to parse config");
+        let symbols = config.all_symbols();
+        
+        assert!(symbols.contains("BTCUSDT"));
+        assert!(symbols.contains("ETHUSDT"));
+        assert!(symbols.contains("SOLUSDT"));
+        assert!(symbols.contains("ADAUSDT"));
+        assert!(symbols.contains("XRPUSDT"));
+        assert!(symbols.contains("DOTUSDT"));
+    }
+
+    #[test]
+    fn test_invalid_ring_size() {
+        let config_str = r#"
+- main_cpu: 0
+- worker_cpus: 1-4
+- pubsubs:
+    - feed:
+        protocol: websocket
+        kind: test
+        parser: json
+        num_cpus: 1
+        ring_size: 1000
+        symbols:
+          - TEST
+"#;
+        let result = HwResourcesConfig::from_str(config_str);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("power of 2"));
+    }
+
+    #[test]
+    fn test_empty_protocol() {
+        let config_str = r#"
+- main_cpu: 0
+- worker_cpus: 1-4
+- pubsubs:
+    - feed:
+        protocol: ""
+        kind: test
+        parser: json
+        num_cpus: 1
+        ring_size: 1024
+        symbols:
+          - TEST
+"#;
+        let result = HwResourcesConfig::from_str(config_str);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("protocol cannot be empty"));
+    }
+
+    #[test]
+    fn test_duplicate_symbols() {
+        let config_str = r#"
+- main_cpu: 0
+- worker_cpus: 1-4
+- pubsubs:
+    - feed:
+        protocol: websocket
+        kind: test
+        parser: json
+        num_cpus: 1
+        ring_size: 1024
+        symbols:
+          - TEST
+          - TEST
+"#;
+        let result = HwResourcesConfig::from_str(config_str);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Duplicate symbol"));
+    }
+
+    #[test]
+    fn test_duplicate_set_names() {
+        let config_str = r#"
+- main_cpu: 0
+- worker_cpus: 1-4
+- pubsubs:
+    - feed:
+        protocol: websocket
+        kind: test
+        parser: json
+        sets:
+          - name: A
+            num_cpus: 1
+            ring_size: 1024
+            symbols:
+              - TEST1
+          - name: A
+            num_cpus: 2
+            ring_size: 1024
+            symbols:
+              - TEST2
+"#;
+        let result = HwResourcesConfig::from_str(config_str);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Duplicate set name"));
+    }
+
+    #[test]
+    fn test_missing_num_cpus_without_sets() {
+        let config_str = r#"
+- main_cpu: 0
+- worker_cpus: 1-4
+- pubsubs:
+    - feed:
+        protocol: websocket
+        kind: test
+        parser: json
+        ring_size: 1024
+        symbols:
+          - TEST
+"#;
+        let result = HwResourcesConfig::from_str(config_str);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("must specify 'num_cpus'"));
+    }
+
+    #[test]
+    fn test_empty_pubsubs() {
+        let config_str = r#"
+- main_cpu: 0
+- worker_cpus: 1-4
+- pubsubs: []
+"#;
+        let result = HwResourcesConfig::from_str(config_str);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("at least one feed"));
+    }
+
+    #[test]
+    fn test_empty_kind() {
+        let config_str = r#"
+- main_cpu: 0
+- worker_cpus: 1-4
+- pubsubs:
+    - feed:
+        protocol: websocket
+        kind: ""
+        parser: json
+        num_cpus: 1
+        ring_size: 1024
+        symbols:
+          - TEST
+"#;
+        let result = HwResourcesConfig::from_str(config_str);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("kind cannot be empty"));
+    }
+
+    #[test]
+    fn test_empty_parser() {
+        let config_str = r#"
+- main_cpu: 0
+- worker_cpus: 1-4
+- pubsubs:
+    - feed:
+        protocol: websocket
+        kind: test
+        parser: ""
+        num_cpus: 1
+        ring_size: 1024
+        symbols:
+          - TEST
+"#;
+        let result = HwResourcesConfig::from_str(config_str);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("parser cannot be empty"));
+    }
+
+    #[test]
+    fn test_missing_main_cpu() {
+        let config_str = r#"
+- worker_cpus: 1-4
+- pubsubs:
+    - feed:
+        protocol: websocket
+        kind: test
+        parser: json
+        num_cpus: 1
+        ring_size: 1024
+        symbols:
+          - TEST
+"#;
+        let result = HwResourcesConfig::from_str(config_str);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Missing 'main_cpu'"));
+    }
+
+    #[test]
+    fn test_missing_worker_cpus() {
+        let config_str = r#"
+- main_cpu: 0
+- pubsubs:
+    - feed:
+        protocol: websocket
+        kind: test
+        parser: json
+        num_cpus: 1
+        ring_size: 1024
+        symbols:
+          - TEST
+"#;
+        let result = HwResourcesConfig::from_str(config_str);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Missing 'worker_cpus'"));
+    }
+
+    #[test]
+    fn test_invalid_worker_cpus_format() {
+        let config_str = r#"
+- main_cpu: 0
+- worker_cpus: 1,2,3
+- pubsubs:
+    - feed:
+        protocol: websocket
+        kind: test
+        parser: json
+        num_cpus: 1
+        ring_size: 1024
+        symbols:
+          - TEST
+"#;
+        let result = HwResourcesConfig::from_str(config_str);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Invalid worker_cpus format"));
+    }
+}
