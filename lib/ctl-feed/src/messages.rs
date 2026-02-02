@@ -4,7 +4,6 @@
 //! Each type is registered via `register_ring!` for automatic allocation.
 
 use dpdk::SharedMemSafe;
-use atx_ring_registry::register_ring;
 
 /// Maximum size for raw message buffer.
 pub const RAW_MESSAGE_SIZE: usize = 512;
@@ -30,9 +29,6 @@ impl Default for RawMessage {
 
 // SAFETY: RawMessage is Copy + Send + Sync + 'static and has a stable layout.
 impl SharedMemSafe for RawMessage {}
-
-// Register the ring for Top feed messages
-register_ring!(RawMessage, "TOP_PUBSUB", 65536);
 
 // Future: Add structured message types for different feed kinds
 // 
