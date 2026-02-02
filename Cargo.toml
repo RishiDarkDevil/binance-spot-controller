@@ -34,6 +34,7 @@ rpath = false            # Disable runtime search path.
 [workspace.dependencies]
 # external
 base64 = "0.22"
+tempfile = { version = "3"}
 url = { version = "2.5.8" }
 reqwest = { version = "0.13.1", features = ["blocking", "json", "query"] }
 thiserror = { version = "2.0.17" }
@@ -42,15 +43,13 @@ derive_more = { version = "2.1.1", features = ["full"] }
 tungstenite = { version = "0.28.0", features = ["native-tls"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = { version = "1.0.149" }
+serde_yaml = { version = "0.9" }
 arraystring = { version = "0.3.0", features = ["serde-traits"] }
 
 # internal (rust-dpdk/)
 dpdk = { version = "0.1.0", path = "../rust-dpdk/dpdk" }
 
 # internal (atomix-core/)
-
-# common
-atx-ring-registry = { version = "0.1.0", path = "../atomix-core/lib/common/atx-ring-registry" }
 
 # exchange
 atx-feed = { version = "0.1.0", path = "../atomix-core/lib/exchange/atx-feed" }

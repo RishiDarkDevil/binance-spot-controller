@@ -7,10 +7,11 @@ authors.workspace = true
 
 [dependencies]
 # external
+serde = { workspace = true }
+serde_yaml = { workspace = true }
+thiserror = { workspace = true }
 
 # internal (atomix-core/)
-# common
-atx-ring-registry = { workspace = true }
 
 # utils
 dpdk = { workspace = true }
@@ -18,6 +19,12 @@ dpdk = { workspace = true }
 # exchange
 atx-feed = { workspace = true }
 
+# handler
+atx-handler = { workspace = true }
+
 # internal
 ctl-feed = { workspace = true }
 ctl-websocket = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

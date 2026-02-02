@@ -1,0 +1,13 @@
+# Hardware Resources Configuration for ctl-resource-manager
+# ==========================================================
+#
+# cpu: CPU core to pin the resource manager process
+# hugepages:
+#   size_kb: Hugepage size in KB (2048 for 2MB, 1048576 for 1GB)
+#   count: Number of hugepages to allocate
+
+cpu: 0
+
+hugepages:
+  size_kb: 2048
+  count: 1024
