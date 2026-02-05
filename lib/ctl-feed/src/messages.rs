@@ -3,8 +3,6 @@
 //! These types are used as the element types in DPDK shared memory rings.
 //! Each type is registered via `register_ring!` for automatic allocation.
 
-use dpdk::SharedMemSafe;
-
 /// Maximum size for raw message buffer.
 pub const RAW_MESSAGE_SIZE: usize = 512;
 
@@ -26,9 +24,6 @@ impl Default for RawMessage {
         }
     }
 }
-
-// SAFETY: RawMessage is Copy + Send + Sync + 'static and has a stable layout.
-impl SharedMemSafe for RawMessage {}
 
 // Future: Add structured message types for different feed kinds
 // 
