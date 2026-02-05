@@ -40,10 +40,10 @@
             medium:
               - protocol: websocket
                 parser: json
-              - protocol: websocket
-                parser: sbe
-              - protocol: websocket
-                parser: fix
+              # - protocol: websocket
+              #   parser: sbe
+              # - protocol: websocket
+              #   parser: fix
           - name: B
             num_cpus: 4
             ring_size: 65536

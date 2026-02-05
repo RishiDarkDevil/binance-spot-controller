@@ -27,7 +27,7 @@ impl FeedParseProtocol<WSConn<Top>, Top> for DummyParser {
                 buf[bytes.len()..].fill(0);
             })
             .map_err(|_| DummyParserError::General)?;
-        println!("parsed_data: {}", String::from_utf8_lossy(&parsed_data.get().data)); // TODO: REMOVE
+        // println!("parsed_data: {}", String::from_utf8_lossy(&parsed_data.get().data)); // TODO: REMOVE
         Ok(())
     }
 }
@@ -51,7 +51,7 @@ impl FeedParseProtocol<WSConn<Trade>, Trade> for DummyParser {
                 buf[bytes.len()..].fill(0);
             })
             .map_err(|_| DummyParserError::General)?;
-        println!("parsed_data: {}", String::from_utf8_lossy(&parsed_data.get().data)); // TODO: REMOVE
+        // println!("parsed_data: {}", String::from_utf8_lossy(&parsed_data.get().data)); // TODO: REMOVE
         Ok(())
     }
 }
@@ -75,7 +75,7 @@ impl FeedParseProtocol<WSConn<AggTrade>, AggTrade> for DummyParser {
                 buf[bytes.len()..].fill(0);
             })
             .map_err(|_| DummyParserError::General)?;
-        println!("parsed_data: {}", String::from_utf8_lossy(&parsed_data.get().data)); // TODO: REMOVE
+        // println!("parsed_data: {}", String::from_utf8_lossy(&parsed_data.get().data)); // TODO: REMOVE
         Ok(())
     }
 }
