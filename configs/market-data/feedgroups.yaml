@@ -1,0 +1,49 @@
+# CPU allocation for market data handler and feed groups
+cpu:
+  main_cpu: 0 # CPU core for the market data handler main thread
+  worker_cpus: 1-10 # CPU cores for market data handler worker threads
+
+# All feed groups and their settings
+feedgroup_settings:
+  - name: FG1 # Name of the feed group
+    kind: top # Kind of feed (e.g., top, trade)
+    protocol: websocket # Protocol used for this feed group
+    parser: json # Parser used for this feed group
+    num_feeds: 8 # Number of feed instances for this group
+    num_workers: 4 # Number of worker threads for this feed group
+    pubsub_size: 65536 # Pub-Sub ring size for this feed group
+  - name: FG2
+    kind: top
+    protocol: websocket
+    parser: json
+    num_feeds: 2
+    num_workers: 2
+    pubsub_size: 32768 
+  - name: FG3
+    kind: trade
+    protocol: websocket
+    parser: json
+    num_feeds: 4
+    num_workers: 4
+    pubsub_size: 65536
+
+# Mapping of feed groups to their symbols
+feedgroups: 
+  - feedgroup: FG1
+    symbols:
+      - BTCUSDT
+      - ETHUSDT
+      - SOLUSDT
+  - feedgroup: FG2
+    symbols:
+      - ADAUSDT
+      - XRPUSDT
+      - DOTUSDT
+  - feedgroup: FG3
+    symbols:
+      - BTCUSDT
+      - ETHUSDT
+      - SOLUSDT
+      - ADAUSDT
+      - XRPUSDT
+      - DOTUSDT
